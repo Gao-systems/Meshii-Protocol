@@ -28,6 +28,10 @@ export {
   initRatchetBob,
   ratchetEncrypt,
   ratchetDecrypt,
+  serializeRatchetState,
+  deserializeRatchetState,
+  encryptRatchetState,
+  decryptRatchetState,
 } from "./double-ratchet.js";
 
 export {

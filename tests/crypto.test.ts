@@ -26,6 +26,10 @@ import {
   initRatchetBob,
   ratchetEncrypt,
   ratchetDecrypt,
+  serializeRatchetState,
+  deserializeRatchetState,
+  encryptRatchetState,
+  decryptRatchetState,
   deriveIdentityKey,
   generateIdentityKeyBundle,
   extractPublicBundle,
@@ -374,6 +378,108 @@ describe("Double Ratchet", () => {
     const enc = await ratchetEncrypt(alice, new TextEncoder().encode("secret"));
     enc.ciphertext[0] ^= 0xff; // tamper
     await expect(ratchetDecrypt(bob, enc)).rejects.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RatchetState serialization
+// ---------------------------------------------------------------------------
+
+describe("RatchetState serialization", () => {
+  async function setupSession() {
+    const bobBundle = generateIdentityKeyBundle(1);
+    const aliceBundle = generateIdentityKeyBundle(0);
+    const bobPub = extractPublicBundle(bobBundle);
+    const { sharedSecret, ephemeralPublicKey } = x3dhSend(
+      aliceBundle.identityKey.privateKey,
+      bobPub
+    );
+    const bobSS = x3dhReceive(
+      bobBundle.identityKey.privateKey,
+      bobBundle.signedPreKey.keyPair.privateKey,
+      bobBundle.oneTimePreKeys[0].keyPair.privateKey,
+      aliceBundle.identityKey.publicKey,
+      ephemeralPublicKey
+    );
+    const alice = initRatchetAlice(sharedSecret, bobBundle.signedPreKey.keyPair.publicKey);
+    const bob = initRatchetBob(bobSS.sharedSecret, bobBundle.signedPreKey.keyPair);
+    return { alice, bob };
+  }
+
+  it("serialized bytes start with version 0x01 and have minimum length", async () => {
+    const { alice } = await setupSession();
+    const bytes = serializeRatchetState(alice);
+    expect(bytes[0]).toBe(0x01);
+    // minimum: 1 version + 32 rk + 1 sCK-flag + 1 rCK-flag + 64 dhKey + 1 rDHPub-flag + 12 counters + 4 count = 116
+    // Alice init: sCK present (+32), rDHPub present (+32) → 180 bytes
+    expect(bytes.length).toBeGreaterThanOrEqual(116);
+  });
+
+  it("Alice state roundtrip — all fields byte-equal", async () => {
+    const { alice } = await setupSession();
+    const restored = deserializeRatchetState(serializeRatchetState(alice));
+
+    expect(bytesToHex(restored.rootKey)).toBe(bytesToHex(alice.rootKey));
+    expect(bytesToHex(restored.sendingChainKey!)).toBe(bytesToHex(alice.sendingChainKey!));
+    expect(restored.receivingChainKey).toBeNull();
+    expect(bytesToHex(restored.sendingDHKey.privateKey)).toBe(bytesToHex(alice.sendingDHKey.privateKey));
+    expect(bytesToHex(restored.sendingDHKey.publicKey)).toBe(bytesToHex(alice.sendingDHKey.publicKey));
+    expect(bytesToHex(restored.receivingDHPublicKey!)).toBe(bytesToHex(alice.receivingDHPublicKey!));
+    expect(restored.sendMessageCount).toBe(alice.sendMessageCount);
+    expect(restored.receiveMessageCount).toBe(alice.receiveMessageCount);
+    expect(restored.previousSendCount).toBe(alice.previousSendCount);
+    expect(restored.skippedMessageKeys.size).toBe(0);
+  });
+
+  it("Bob state roundtrip — null sending/receiving chains preserved", async () => {
+    const { bob } = await setupSession();
+    const restored = deserializeRatchetState(serializeRatchetState(bob));
+
+    expect(bytesToHex(restored.rootKey)).toBe(bytesToHex(bob.rootKey));
+    expect(restored.sendingChainKey).toBeNull();
+    expect(restored.receivingChainKey).toBeNull();
+    expect(restored.receivingDHPublicKey).toBeNull();
+  });
+
+  it("roundtrip preserves skippedMessageKeys entries", async () => {
+    const { alice, bob } = await setupSession();
+    // Send 3 messages from Alice, decrypt only the 3rd — forces 2 skipped keys into Bob
+    const enc0 = await ratchetEncrypt(alice, new TextEncoder().encode("msg0"));
+    const enc1 = await ratchetEncrypt(alice, new TextEncoder().encode("msg1"));
+    const enc2 = await ratchetEncrypt(alice, new TextEncoder().encode("msg2"));
+    await ratchetDecrypt(bob, enc2); // skips 0 and 1
+
+    expect(bob.skippedMessageKeys.size).toBe(2);
+
+    const restored = deserializeRatchetState(serializeRatchetState(bob));
+    expect(restored.skippedMessageKeys.size).toBe(2);
+
+    // Restored bob can still decrypt the skipped messages
+    const dec0 = await ratchetDecrypt(restored, enc0);
+    const dec1 = await ratchetDecrypt(restored, enc1);
+    expect(new TextDecoder().decode(dec0)).toBe("msg0");
+    expect(new TextDecoder().decode(dec1)).toBe("msg1");
+  });
+
+  it("encryptRatchetState / decryptRatchetState roundtrip", async () => {
+    const { alice } = await setupSession();
+    const key = randomBytes(32);
+    const encrypted = await encryptRatchetState(alice, key);
+    const restored = await decryptRatchetState(encrypted, key);
+
+    expect(bytesToHex(restored.rootKey)).toBe(bytesToHex(alice.rootKey));
+    expect(bytesToHex(restored.sendingDHKey.privateKey)).toBe(
+      bytesToHex(alice.sendingDHKey.privateKey)
+    );
+    expect(restored.sendMessageCount).toBe(alice.sendMessageCount);
+  });
+
+  it("decryptRatchetState throws on tampered bytes", async () => {
+    const { alice } = await setupSession();
+    const key = randomBytes(32);
+    const encrypted = await encryptRatchetState(alice, key);
+    encrypted[encrypted.length - 1] ^= 0xff; // tamper auth tag
+    await expect(decryptRatchetState(encrypted, key)).rejects.toThrow();
   });
 });
 

@@ -56,6 +56,10 @@ export {
   initRatchetBob,
   ratchetEncrypt,
   ratchetDecrypt,
+  serializeRatchetState,
+  deserializeRatchetState,
+  encryptRatchetState,
+  decryptRatchetState,
   // Identity
   deriveIdentityKey,
   generateIdentityKeyBundle,

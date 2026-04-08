@@ -210,6 +210,153 @@ export async function ratchetEncrypt(
   return { header, ciphertext, nonce };
 }
 
+// ---------------------------------------------------------------------------
+// RatchetState serialization
+// ---------------------------------------------------------------------------
+
+const VERSION = 0x01;
+const AES_NONCE_LEN = 12;
+
+/**
+ * Serialize a RatchetState to a compact binary format.
+ *
+ * Format (version 0x01):
+ *   [0x01 version][rootKey 32B]
+ *   [flag 1B][sendingChainKey 32B if present]
+ *   [flag 1B][receivingChainKey 32B if present]
+ *   [sendingDHKey.privateKey 32B][sendingDHKey.publicKey 32B]
+ *   [flag 1B][receivingDHPublicKey 32B if present]
+ *   [sendMessageCount 4B BE][receiveMessageCount 4B BE][previousSendCount 4B BE]
+ *   [skippedKeys count 4B BE]
+ *   for each entry: [keyLen 2B BE][keyBytes N][messageKey 32B]
+ *
+ * Contains private key material — store securely.
+ */
+export function serializeRatchetState(state: RatchetState): Uint8Array {
+  const enc = new TextEncoder();
+  const parts: Uint8Array[] = [];
+
+  const w8 = (v: number) => new Uint8Array([v]);
+  const w16be = (v: number) => new Uint8Array([(v >> 8) & 0xff, v & 0xff]);
+  const w32be = (v: number) =>
+    new Uint8Array([(v >>> 24) & 0xff, (v >>> 16) & 0xff, (v >>> 8) & 0xff, v & 0xff]);
+  const optional = (v: Uint8Array | null) => {
+    if (v === null) return [w8(0x00)];
+    return [w8(0x01), v];
+  };
+
+  parts.push(w8(VERSION));
+  parts.push(state.rootKey);
+  parts.push(...optional(state.sendingChainKey));
+  parts.push(...optional(state.receivingChainKey));
+  parts.push(state.sendingDHKey.privateKey);
+  parts.push(state.sendingDHKey.publicKey);
+  parts.push(...optional(state.receivingDHPublicKey));
+  parts.push(w32be(state.sendMessageCount));
+  parts.push(w32be(state.receiveMessageCount));
+  parts.push(w32be(state.previousSendCount));
+  parts.push(w32be(state.skippedMessageKeys.size));
+
+  for (const [key, mk] of state.skippedMessageKeys) {
+    const keyBytes = enc.encode(key);
+    parts.push(w16be(keyBytes.length));
+    parts.push(keyBytes);
+    parts.push(mk);
+  }
+
+  return concat(parts);
+}
+
+/**
+ * Deserialize a RatchetState produced by serializeRatchetState().
+ * Throws if the version byte is unrecognized or the buffer is truncated.
+ */
+export function deserializeRatchetState(bytes: Uint8Array): RatchetState {
+  const dec = new TextDecoder();
+  let pos = 0;
+
+  const read = (n: number): Uint8Array => {
+    if (pos + n > bytes.length) throw new Error("RatchetState: buffer truncated");
+    return bytes.slice(pos, (pos += n));
+  };
+  const r8 = (): number => read(1)[0];
+  const r16be = (): number => { const b = read(2); return (b[0] << 8) | b[1]; };
+  const r32be = (): number => {
+    const b = read(4);
+    return ((b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]) >>> 0;
+  };
+  const optional = (): Uint8Array | null => r8() === 0x01 ? read(32) : null;
+
+  const version = r8();
+  if (version !== VERSION) throw new Error(`RatchetState: unknown version 0x${version.toString(16)}`);
+
+  const rootKey = read(32);
+  const sendingChainKey = optional();
+  const receivingChainKey = optional();
+  const dhPriv = read(32);
+  const dhPub = read(32);
+  const receivingDHPublicKey = optional();
+  const sendMessageCount = r32be();
+  const receiveMessageCount = r32be();
+  const previousSendCount = r32be();
+
+  const skippedCount = r32be();
+  const skippedMessageKeys = new Map<string, Uint8Array>();
+  for (let i = 0; i < skippedCount; i++) {
+    const keyLen = r16be();
+    const key = dec.decode(read(keyLen));
+    const mk = read(32);
+    skippedMessageKeys.set(key, mk);
+  }
+
+  return {
+    rootKey,
+    sendingChainKey,
+    receivingChainKey,
+    sendingDHKey: { privateKey: dhPriv, publicKey: dhPub },
+    receivingDHPublicKey,
+    sendMessageCount,
+    receiveMessageCount,
+    previousSendCount,
+    skippedMessageKeys,
+  };
+}
+
+/**
+ * Serialize and AES-256-GCM encrypt a RatchetState.
+ *
+ * Output: [12-byte nonce][AES-GCM ciphertext (includes 16-byte auth tag)]
+ *
+ * @param state       Ratchet state to persist
+ * @param keyMaterial 32-byte AES-256 key (e.g. derived from a master key via HKDF)
+ */
+export async function encryptRatchetState(
+  state: RatchetState,
+  keyMaterial: Uint8Array
+): Promise<Uint8Array> {
+  const plaintext = serializeRatchetState(state);
+  const { ciphertext, nonce } = await aesGCMEncrypt(keyMaterial, plaintext);
+  return concat([nonce, ciphertext]);
+}
+
+/**
+ * Decrypt and deserialize a RatchetState produced by encryptRatchetState().
+ * Throws on authentication failure (tampered bytes) or truncated input.
+ *
+ * @param bytes       Output of encryptRatchetState()
+ * @param keyMaterial 32-byte AES-256 key — must match the key used to encrypt
+ */
+export async function decryptRatchetState(
+  bytes: Uint8Array,
+  keyMaterial: Uint8Array
+): Promise<RatchetState> {
+  if (bytes.length < AES_NONCE_LEN + 1) throw new Error("RatchetState: encrypted buffer too short");
+  const nonce = bytes.slice(0, AES_NONCE_LEN);
+  const ciphertext = bytes.slice(AES_NONCE_LEN);
+  const plaintext = await aesGCMDecrypt(keyMaterial, ciphertext, nonce);
+  return deserializeRatchetState(plaintext);
+}
+
 /**
  * Decrypt a message. May perform a DH ratchet step.
  * Mutates `state` in place.
