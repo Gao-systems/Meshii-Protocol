@@ -1,41 +1,46 @@
-# CLAUDE.md — @meshii/protocol
+# CLAUDE.md — Meshii Protocol
 
-**Package:** `@meshii/protocol`
-**Spec:** MESHII_PROTOCOL_SPEC_v2.1 (canonical)
-**Owner:** Toii Labs LLC
+## MANDATORY: Read this file before any action.
 
-## Governing Invariants
+### Rules
 
-All 12 protocol invariants (MESHINV-01–12) apply. This package implements crypto primitives only — no transport, no relay, no UI.
+1. Before making any code or config change, first show a concise diff plan and wait for explicit approval.
+1. Any modification to `src/`, `tests/`, `package.json`, lockfiles, CI, build config, or tsconfig MUST be explicitly listed in the diff plan and approved before execution.
+1. Do not add runtime or dev dependencies without listing them first and waiting for approval.
+1. Do not remove or relax security checks, validation, or test assertions to make builds pass.
+1. No `Math.random()`, `Date.now()` for entropy, no `Buffer`, no Node.js `crypto`, and no `process.env` usage inside `src/`.
+1. Preserve backward compatibility for all public exports; flag breaking changes explicitly before editing.
+1. If a referenced file/path does not exist, report it and stop. Do not invent replacements without approval.
+1. After any approved code change, run `pnpm typecheck && pnpm test` and report results.
+- All existing tests must pass
+- Test coverage and count must not regress from the current baseline unless explicitly approved
+1. Commit messages must follow: `type(scope): description`
+1. Do not bypass failing tests by:
+- modifying test expectations without justification
+- disabling/skipping tests
+- altering test config (Vitest, tsconfig, CI) without explicit approval
+1. Do not change cryptographic primitives, encoding formats, or protocol logic (canonicalJSON, signatures, ratchet state, key derivation) without explicit approval and justification.
+1. All code must remain compatible with Browser, Cloudflare Workers, and Node 18+.
+   Do not introduce environment-specific APIs into shared code.
+1. All encoding/decoding must be deterministic and protocol-safe:
+- Use canonical JSON where required
+- Do not change serialization formats (JSON shape, base64/base64url, byte encoding) without explicit approval
+1. If unsure about any change affecting security, crypto, or protocol behavior:
+- STOP
+- Explain the uncertainty
+- Ask for clarification before proceeding
 
-## Crypto Rules
+### Stack
 
-- `globalThis.crypto.getRandomValues` — only source of randomness
-- `globalThis.crypto.subtle` — only AES-GCM implementation
-- `@noble/curves` + `@noble/hashes` — only crypto libraries
-- No `Math.random()`, no `Buffer`, no Node.js `crypto`, no `process.env`
-- AES-256-GCM nonces: 96-bit, random per call, never reused
-- Ed25519 signatures: deterministic (RFC 8032 §5.1.6)
+- Runtime: Browser + Cloudflare Workers + Node 18+
+- Crypto: `@noble/curves` + `@noble/hashes` only
+- Test: Vitest 2.x — baseline 91/91
+- CI: GitHub Actions (Node 18.x + 20.x matrix)
 
-## Forbidden
+### Key files
 
-- GPL/LGPL/AGPL dependencies (MESHINV-11)
-- Proprietary crypto libraries
-- Hardcoded keys, IVs, or salts
-- AES in ECB or CBC mode
-- secp256k1 for message signing (wallet auth only)
-
-## Before Every Task
-
-1. Read this file
-2. Read SECURITY.md
-3. Run `pnpm typecheck` — zero errors required
-4. Run `pnpm test` — zero failures required
-
-## VC Issuer
-
-Canonical issuer DID: `did:web:id.gao.domains`
-
-## Note on VC Canonicalization
-
-This library implements simplified Ed25519Signature2020 using deterministic JSON (sorted keys) as the signing input. Full JSON-LD RDNA canonicalization is out of scope — it requires a ~100kB processor not compatible with CF Workers zero-dep requirement.
+- `src/crypto/primitives.ts` — canonicalJSON + crypto primitives
+- `src/crypto/double-ratchet.ts` — X3DH + Double Ratchet + RatchetState serialization
+- `src/credentials/vc.ts` — W3C VC issuance + verification
+- `src/token/capability.ts` — capability token sign + verify
+- `tests/setup.ts` — WebCrypto polyfill for Vitest
