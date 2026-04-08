@@ -14,6 +14,7 @@ import {
   randomBytes,
   bytesToHex,
   hexToBytes,
+  canonicalJSON,
 } from "../crypto/primitives.js";
 import type {
   SignalingCapabilityToken,
@@ -21,15 +22,6 @@ import type {
 } from "../types/index.js";
 
 const MAX_TOKEN_TTL_MS = 5 * 60 * 1000; // 5 minutes per spec §9.3
-
-/** Deterministic JSON with sorted keys — canonical signing input. */
-function canonicalPayload(token: SignalingCapabilityToken): Uint8Array {
-  const sorted: Record<string, unknown> = {};
-  for (const key of (Object.keys(token) as (keyof SignalingCapabilityToken)[]).sort()) {
-    sorted[key] = token[key];
-  }
-  return new TextEncoder().encode(JSON.stringify(sorted));
-}
 
 /**
  * Sign a capability token with an Ed25519 deployment key.
@@ -41,7 +33,7 @@ export function signCapabilityToken(
   token: SignalingCapabilityToken,
   signingKey: Uint8Array
 ): SignedCapabilityToken {
-  const input = canonicalPayload(token);
+  const input = new TextEncoder().encode(canonicalJSON(token));
   const signature = ed25519Sign(signingKey, input);
   return { ...token, signature: bytesToHex(signature) };
 }
@@ -71,7 +63,7 @@ export function verifyCapabilityToken(
   // Reconstruct payload without signature field
   const { signature: _sig, ...payload } = token;
   void _sig;
-  return ed25519Verify(verifyKey, canonicalPayload(payload), sigBytes);
+  return ed25519Verify(verifyKey, new TextEncoder().encode(canonicalJSON(payload)), sigBytes);
 }
 
 /**

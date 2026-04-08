@@ -11,7 +11,7 @@
  * incompatible with CF Workers zero-dep requirement).
  */
 
-import { ed25519Sign, ed25519Verify, encodeBase58, decodeBase58 } from "../crypto/primitives.js";
+import { ed25519Sign, ed25519Verify, encodeBase58, decodeBase58, canonicalJSON } from "../crypto/primitives.js";
 import type {
   MeshiiIdentityCredential,
   MeshiiIdentityCredentialSigned,
@@ -23,21 +23,6 @@ export const VC_CONTEXT = [
   "https://www.w3.org/2018/credentials/v1",
   "https://meshii.gao/credentials/v2",
 ];
-
-/** Recursively sort object keys for deterministic JSON serialization. */
-function canonicalJSON(obj: unknown): string {
-  if (Array.isArray(obj)) {
-    return "[" + obj.map(canonicalJSON).join(",") + "]";
-  }
-  if (obj !== null && typeof obj === "object") {
-    const rec = obj as Record<string, unknown>;
-    const sorted = Object.keys(rec)
-      .sort()
-      .map((k) => JSON.stringify(k) + ":" + canonicalJSON(rec[k]));
-    return "{" + sorted.join(",") + "}";
-  }
-  return JSON.stringify(obj);
-}
 
 function signingBytes(vc: MeshiiIdentityCredential): Uint8Array {
   // Remove proof field before signing

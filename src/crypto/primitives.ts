@@ -264,3 +264,31 @@ export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   for (let i = 0; i < a.length; i++) acc |= a[i] ^ b[i];
   return acc === 0;
 }
+
+// ---------------------------------------------------------------------------
+// Canonical JSON — deterministic signing input
+// ---------------------------------------------------------------------------
+
+/**
+ * Deterministic JSON serialization with recursively sorted object keys.
+ *
+ * Used as the canonical signing input for VCs and capability tokens.
+ * Handles: objects (all keys sorted recursively), arrays (order preserved),
+ * and all JSON primitives. Output is compact (no spaces).
+ *
+ * Intentionally NOT re-exported from src/crypto/index.ts — internal utility.
+ * Import directly from "../crypto/primitives.js" where needed.
+ */
+export function canonicalJSON(obj: unknown): string {
+  if (Array.isArray(obj)) {
+    return "[" + obj.map(canonicalJSON).join(",") + "]";
+  }
+  if (obj !== null && typeof obj === "object") {
+    const rec = obj as Record<string, unknown>;
+    const sorted = Object.keys(rec)
+      .sort()
+      .map((k) => JSON.stringify(k) + ":" + canonicalJSON(rec[k]));
+    return "{" + sorted.join(",") + "}";
+  }
+  return JSON.stringify(obj);
+}
