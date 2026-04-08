@@ -232,7 +232,7 @@ export function decodeBase58(str: string): Uint8Array {
     result.unshift(Number(num % 256n));
     num = num / 256n;
   }
-  return new Uint8Array([...new Array(leadingZeros).fill(0), ...result]);
+  return new Uint8Array([...new Array<number>(leadingZeros).fill(0), ...result]);
 }
 
 // ---------------------------------------------------------------------------
