@@ -1,5 +1,7 @@
 # @meshii/protocol
 
+[![CI](https://github.com/Gao-systems/Meshii-Protocol/actions/workflows/ci.yml/badge.svg)](https://github.com/Gao-systems/Meshii-Protocol/actions/workflows/ci.yml)
+
 Meshii Protocol cryptographic primitives.
 Implements MESHII_PROTOCOL_SPEC_v2.1.
 
