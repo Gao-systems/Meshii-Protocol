@@ -11,7 +11,8 @@ System-level security policy: see GAO SYSTEMS — SECURITY DOCUMENTATION SUITE.
 
 | Primitive | Algorithm | Standard | Implementation |
 |-----------|-----------|----------|----------------|
-| IK derivation | HKDF-SHA256 | RFC 5869 | @noble/hashes/hkdf |
+| IK derivation (Tier 1) | HKDF-SHA256 | RFC 5869 | @noble/hashes/hkdf |
+| IK generation (Tier 3) | Random Ed25519 keypair | RFC 8032 | @noble/curves/ed25519 + crypto.getRandomValues |
 | Key agreement | X25519 ECDH + X3DH | RFC 7748 | @noble/curves/ed25519 |
 | Signing | Ed25519 | RFC 8032 | @noble/curves/ed25519 |
 | Encryption | AES-256-GCM | NIST SP 800-38D | WebCrypto |
