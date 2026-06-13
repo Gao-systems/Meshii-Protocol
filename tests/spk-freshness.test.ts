@@ -7,10 +7,13 @@
 import { describe, it, expect } from "vitest";
 import {
   bytesToHex,
+  generateEd25519KeyPair,
+  generateX25519KeyPair,
   generateIdentityKeyBundle,
   extractPublicBundle,
   verifySPKSignature,
   verifySPKSignatureV2,
+  signSPKSignatureV2,
   x3dhSend,
   x3dhReceive,
 } from "../src/crypto/index.js";
@@ -111,6 +114,53 @@ describe("SPK signature — backward compatibility", () => {
     const pub = freshPublic();
     pub.signedPreKey.publicKey[0] ^= 0xff;
     expect(verifySPKSignature(pub)).toBe(false);
+  });
+});
+
+describe("signSPKSignatureV2 — canonical signer", () => {
+  it("reproduces the signature that generateIdentityKeyBundle produced (parity)", () => {
+    const b = generateIdentityKeyBundle(1);
+    const sp = b.signedPreKey;
+    const sig = signSPKSignatureV2(
+      b.identityKey.privateKey,
+      sp.keyPair.publicKey,
+      sp.keyId,
+      sp.createdAt,
+      sp.expiresAt
+    );
+    expect(bytesToHex(sig)).toBe(bytesToHex(sp.signatureV2));
+  });
+
+  it("output verifies via verifySPKSignatureV2 and binds each field", () => {
+    const ik = generateEd25519KeyPair();
+    const spk = generateX25519KeyPair();
+    const keyId = 1;
+    const createdAt = 1_700_000_000_000;
+    const expiresAt = createdAt + 7 * 24 * 60 * 60 * 1000;
+    const signatureV2 = signSPKSignatureV2(ik.privateKey, spk.publicKey, keyId, createdAt, expiresAt);
+
+    const mk = (over: Record<string, unknown>) => ({
+      identityKeyPublic: ik.publicKey,
+      signedPreKey: {
+        publicKey: spk.publicKey,
+        signature: new Uint8Array(64), // v1 unused here
+        signatureV2,
+        keyId,
+        createdAt,
+        expiresAt,
+        ...over,
+      },
+      oneTimePreKeys: [],
+    });
+    const now = createdAt + 1000;
+    expect(verifySPKSignatureV2(mk({}), { now })).toBe(true);
+    // tamper each bound field → verification fails (signature does not re-bind)
+    expect(verifySPKSignatureV2(mk({ keyId: 2 }), { now })).toBe(false);
+    expect(verifySPKSignatureV2(mk({ createdAt: createdAt - 1 }), { now })).toBe(false);
+    expect(verifySPKSignatureV2(mk({ expiresAt: expiresAt + 1 }), { now })).toBe(false);
+    const badSpk = new Uint8Array(spk.publicKey);
+    badSpk[0] = (badSpk[0]! ^ 0xff) & 0xff;
+    expect(verifySPKSignatureV2(mk({ publicKey: badSpk }), { now })).toBe(false);
   });
 });
 
