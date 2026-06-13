@@ -24,9 +24,11 @@ export type IdentityKeyBundle = {
   identityKey: Ed25519KeyPair;
   signedPreKey: {
     keyPair: X25519KeyPair;
-    signature: Uint8Array; // Ed25519(IK_priv, SPK_pub)
+    signature: Uint8Array;   // v1 (legacy): Ed25519(IK_priv, SPK_pub) — no freshness binding
+    signatureV2: Uint8Array; // v2 (preferred): Ed25519(IK_priv, canonical{v,spk,keyId,createdAt,expiresAt})
     keyId: number;
-    createdAt: number;     // Unix ms — rotate every 7 days per spec
+    createdAt: number;       // Unix ms
+    expiresAt: number;       // Unix ms — createdAt + 7 days per spec (bound by signatureV2)
   };
   oneTimePreKeys: Array<{
     keyPair: X25519KeyPair;
@@ -39,9 +41,13 @@ export type IdentityKeyBundlePublic = {
   identityKeyPublic: Uint8Array;
   signedPreKey: {
     publicKey: Uint8Array;
-    signature: Uint8Array;
+    signature: Uint8Array; // v1 (legacy)
+    /** v2 signature (preferred). Optional so legacy bundles still type-check; verifySPKSignatureV2 fails closed when absent. */
+    signatureV2?: Uint8Array;
     keyId: number;
     createdAt: number;
+    /** SPK expiry (Unix ms). Optional for legacy compatibility; required for v2 freshness verification. */
+    expiresAt?: number;
   };
   oneTimePreKeys: Array<{
     publicKey: Uint8Array;

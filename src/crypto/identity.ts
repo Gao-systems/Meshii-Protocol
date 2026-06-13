@@ -18,12 +18,45 @@ import {
   ed25519Sign,
   ed25519Verify,
   hkdfSHA256,
+  bytesToHex,
+  canonicalJSON,
 } from "./primitives.js";
 import type {
   Ed25519KeyPair,
   IdentityKeyBundle,
   IdentityKeyBundlePublic,
 } from "../types/index.js";
+
+/** Domain-separation context for the v2 Signed PreKey signature payload. */
+export const SPK_SIG_V2_CONTEXT = "meshii-spk-v2";
+
+/** Default Signed PreKey lifetime: 7 days (per spec §5.4 rotation cadence). */
+export const SPK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Canonical signing input for the v2 Signed PreKey signature.
+ *
+ * Binds the SPK public key together with its keyId, createdAt and expiresAt
+ * under a versioned context string, so a relay cannot serve a stale-but-validly
+ * -signed SPK (MESHINV-09 freshness). Deterministic via canonicalJSON (the same
+ * canonicalization used for VC and capability-token signing).
+ */
+function spkSigningPayloadV2(
+  spkPublicKey: Uint8Array,
+  keyId: number,
+  createdAt: number,
+  expiresAt: number
+): Uint8Array {
+  return new TextEncoder().encode(
+    canonicalJSON({
+      v: SPK_SIG_V2_CONTEXT,
+      spk: bytesToHex(spkPublicKey),
+      keyId,
+      createdAt,
+      expiresAt,
+    })
+  );
+}
 
 /**
  * Derive an Identity Key (Ed25519) from a shared ECDH secret.
@@ -72,7 +105,16 @@ export function generateIdentityKeyBundle(opkCount = 100): IdentityKeyBundle {
   const identityKey = generateEd25519KeyPair();
 
   const spkPair = generateX25519KeyPair();
+  const keyId = 1;
+  const createdAt = Date.now();
+  const expiresAt = createdAt + SPK_TTL_MS;
+  // v1 (legacy): signs only the SPK public key. Retained for backward compatibility.
   const spkSignature = ed25519Sign(identityKey.privateKey, spkPair.publicKey);
+  // v2 (preferred): binds spk + keyId + createdAt + expiresAt under a versioned context.
+  const spkSignatureV2 = ed25519Sign(
+    identityKey.privateKey,
+    spkSigningPayloadV2(spkPair.publicKey, keyId, createdAt, expiresAt)
+  );
 
   const oneTimePreKeys: IdentityKeyBundle["oneTimePreKeys"] = [];
   for (let i = 0; i < opkCount; i++) {
@@ -84,8 +126,10 @@ export function generateIdentityKeyBundle(opkCount = 100): IdentityKeyBundle {
     signedPreKey: {
       keyPair: spkPair,
       signature: spkSignature,
-      keyId: 1,
-      createdAt: Date.now(),
+      signatureV2: spkSignatureV2,
+      keyId,
+      createdAt,
+      expiresAt,
     },
     oneTimePreKeys,
   };
@@ -102,8 +146,10 @@ export function extractPublicBundle(
     signedPreKey: {
       publicKey: bundle.signedPreKey.keyPair.publicKey,
       signature: bundle.signedPreKey.signature,
+      signatureV2: bundle.signedPreKey.signatureV2,
       keyId: bundle.signedPreKey.keyId,
       createdAt: bundle.signedPreKey.createdAt,
+      expiresAt: bundle.signedPreKey.expiresAt,
     },
     oneTimePreKeys: bundle.oneTimePreKeys.map((opk) => ({
       publicKey: opk.keyPair.publicKey,
@@ -113,8 +159,12 @@ export function extractPublicBundle(
 }
 
 /**
- * Verify the SPK signature in a public bundle.
- * Must return true before using the bundle for X3DH (MESHINV-09).
+ * Verify the v1 (legacy) SPK signature: Ed25519(IK_priv, SPK_pub).
+ *
+ * @deprecated Legacy. This binds ONLY the SPK public key — it does NOT bind
+ * keyId/createdAt/expiresAt, so it cannot detect a relay serving a
+ * stale-but-validly-signed SPK. Use {@link verifySPKSignatureV2} for freshness.
+ * Retained for backward compatibility with bundles that carry only a v1 signature.
  */
 export function verifySPKSignature(bundle: IdentityKeyBundlePublic): boolean {
   return ed25519Verify(
@@ -122,4 +172,41 @@ export function verifySPKSignature(bundle: IdentityKeyBundlePublic): boolean {
     bundle.signedPreKey.publicKey,
     bundle.signedPreKey.signature
   );
+}
+
+/**
+ * Verify the v2 Signed PreKey signature (preferred).
+ *
+ * The v2 signature binds spkPublicKey + keyId + createdAt + expiresAt under the
+ * "meshii-spk-v2" context, defending against a relay that serves a
+ * stale-but-validly-signed SPK (MESHINV-09 freshness).
+ *
+ * Fail-closed: returns false if the v2 fields are absent, the validity window is
+ * malformed (expiresAt <= createdAt or non-finite), the SPK is expired
+ * (now > expiresAt), the payload cannot be built, or the signature is invalid.
+ *
+ * Consumers that require freshness MUST use this and treat a missing/invalid v2
+ * signature as rejection — falling back to {@link verifySPKSignature} (v1) does
+ * not protect against old-SPK replay.
+ *
+ * @param bundle    Public identity key bundle
+ * @param opts.now  Current time in Unix ms (default: Date.now())
+ */
+export function verifySPKSignatureV2(
+  bundle: IdentityKeyBundlePublic,
+  opts?: { now?: number }
+): boolean {
+  const spk = bundle.signedPreKey;
+  if (spk.signatureV2 === undefined || spk.expiresAt === undefined) return false;
+  if (!Number.isFinite(spk.createdAt) || !Number.isFinite(spk.expiresAt)) return false;
+  if (spk.expiresAt <= spk.createdAt) return false;
+  const now = opts?.now ?? Date.now();
+  if (!Number.isFinite(now)) return false; // reject NaN/±Infinity clock values
+  if (now > spk.expiresAt) return false;
+  try {
+    const payload = spkSigningPayloadV2(spk.publicKey, spk.keyId, spk.createdAt, spk.expiresAt);
+    return ed25519Verify(bundle.identityKeyPublic, payload, spk.signatureV2);
+  } catch {
+    return false;
+  }
 }

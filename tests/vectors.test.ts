@@ -16,6 +16,7 @@ import {
   computeRoutingTag,
   serializeRatchetState,
   deserializeRatchetState,
+  verifySPKSignatureV2,
 } from "../src/crypto/index.js";
 import { canonicalJSON } from "../src/crypto/primitives.js";
 import { signCapabilityToken, verifyCapabilityToken } from "../src/token/index.js";
@@ -263,5 +264,40 @@ describe("KAT: W3C VC (Ed25519Signature2020 deterministic)", () => {
     const verifyPub = ed25519GetPublicKey(h(v.signing_seed));
     expect(bytesToHex(verifyPub)).toBe(v.verify_public);
     expect(verifyVC(signed, verifyPub)).toBe(true);
+  });
+});
+
+describe("KAT: SPK signature v2 (Ed25519 deterministic, freshness-bound)", () => {
+  it("signature matches frozen value, verifies true, independent recompute", () => {
+    const s = V.spk_signature_v2;
+    // independent recompute: sig == Ed25519Sign(IK_seed, UTF8(canonicalJSON(payload)))
+    const payload = canonicalJSON({
+      v: s.context,
+      spk: s.spk_public,
+      keyId: s.keyId,
+      createdAt: s.createdAt,
+      expiresAt: s.expiresAt,
+    });
+    expect(payload).toBe(s.expected_canonical_payload);
+    expect(bytesToHex(ed25519Sign(h(s.ik_seed), new TextEncoder().encode(payload)))).toBe(
+      s.expected_signature_v2
+    );
+
+    // library verifier accepts a public bundle carrying the frozen v2 signature
+    const bundle = {
+      identityKeyPublic: h(s.ik_public),
+      signedPreKey: {
+        publicKey: h(s.spk_public),
+        signature: new Uint8Array(64), // v1 unused here
+        signatureV2: h(s.expected_signature_v2),
+        keyId: s.keyId,
+        createdAt: s.createdAt,
+        expiresAt: s.expiresAt,
+      },
+      oneTimePreKeys: [],
+    };
+    expect(verifySPKSignatureV2(bundle, { now: s.createdAt + 1000 })).toBe(true);
+    // expired → rejected
+    expect(verifySPKSignatureV2(bundle, { now: s.expiresAt + 1 })).toBe(false);
   });
 });

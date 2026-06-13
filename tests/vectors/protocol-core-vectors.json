@@ -115,5 +115,18 @@
       }
     },
     "expected_proof_value": "2E4jv8Rkn43rcMvRsjzkhGWqaGGNa6HXGPcyEs3skWD5uCx6To7srS9ZHQnzBNS6tYDvB2cK2B1WLfijjEn6pxdY"
+  },
+  "spk_signature_v2": {
+    "comment": "v2 Signed PreKey signature = Ed25519(IK_priv, canonicalJSON({v,spk,keyId,createdAt,expiresAt})) under context 'meshii-spk-v2'. Ed25519 is deterministic, so the signature is frozen. verifySPKSignatureV2 must accept a bundle carrying these fields when now <= expiresAt.",
+    "context": "meshii-spk-v2",
+    "ttl_ms": 604800000,
+    "ik_seed": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+    "ik_public": "0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d",
+    "spk_public": "b307ae8660efaed4d6a65f6640896892ea4a1f0075555c489d1312a2e1677c28",
+    "keyId": 1,
+    "createdAt": 1700000000000,
+    "expiresAt": 1700604800000,
+    "expected_canonical_payload": "{\"createdAt\":1700000000000,\"expiresAt\":1700604800000,\"keyId\":1,\"spk\":\"b307ae8660efaed4d6a65f6640896892ea4a1f0075555c489d1312a2e1677c28\",\"v\":\"meshii-spk-v2\"}",
+    "expected_signature_v2": "95c8509f69f02ce849862449c49e501caf5ce01508a82f83d63bf0f6d362a8b68053b9c5c136735647410faa4edb488c5e79db0cef44ee59e05418c9653a1906"
   }
 }
