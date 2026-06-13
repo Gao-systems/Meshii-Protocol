@@ -210,3 +210,35 @@ export function verifySPKSignatureV2(
     return false;
   }
 }
+
+/**
+ * Sign a v2 Signed PreKey signature (the canonical counterpart of
+ * {@link verifySPKSignatureV2}).
+ *
+ * Signs the SAME canonical payload that verifySPKSignatureV2 reconstructs — it
+ * binds spkPublicKey + keyId + createdAt + expiresAt under the "meshii-spk-v2"
+ * context — so consumers (e.g. key-package registration that signs an SPK with an
+ * existing identity key) do not need to duplicate the canonical payload.
+ *
+ * `expiresAt` is explicit; callers typically pass `createdAt + SPK_TTL_MS`.
+ * Returns the raw Ed25519 signature bytes (assign to
+ * `signedPreKey.signatureV2`).
+ *
+ * @param identityKeyPrivate  IK Ed25519 private key (signs the SPK)
+ * @param spkPublicKey        X25519 Signed PreKey public key
+ * @param keyId               SPK key id
+ * @param createdAt           SPK creation time (Unix ms)
+ * @param expiresAt           SPK expiry (Unix ms)
+ */
+export function signSPKSignatureV2(
+  identityKeyPrivate: Uint8Array,
+  spkPublicKey: Uint8Array,
+  keyId: number,
+  createdAt: number,
+  expiresAt: number
+): Uint8Array {
+  return ed25519Sign(
+    identityKeyPrivate,
+    spkSigningPayloadV2(spkPublicKey, keyId, createdAt, expiresAt)
+  );
+}

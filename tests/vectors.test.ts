@@ -17,6 +17,7 @@ import {
   serializeRatchetState,
   deserializeRatchetState,
   verifySPKSignatureV2,
+  signSPKSignatureV2,
 } from "../src/crypto/index.js";
 import { canonicalJSON } from "../src/crypto/primitives.js";
 import { signCapabilityToken, verifyCapabilityToken } from "../src/token/index.js";
@@ -299,5 +300,11 @@ describe("KAT: SPK signature v2 (Ed25519 deterministic, freshness-bound)", () =>
     expect(verifySPKSignatureV2(bundle, { now: s.createdAt + 1000 })).toBe(true);
     // expired → rejected
     expect(verifySPKSignatureV2(bundle, { now: s.expiresAt + 1 })).toBe(false);
+  });
+
+  it("signSPKSignatureV2 reproduces the frozen signature (canonical signer == KAT)", () => {
+    const s = V.spk_signature_v2;
+    const sig = signSPKSignatureV2(h(s.ik_seed), h(s.spk_public), s.keyId, s.createdAt, s.expiresAt);
+    expect(bytesToHex(sig)).toBe(s.expected_signature_v2);
   });
 });

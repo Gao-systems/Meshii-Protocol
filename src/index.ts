@@ -66,6 +66,7 @@ export {
   extractPublicBundle,
   verifySPKSignature,
   verifySPKSignatureV2,
+  signSPKSignatureV2,
   SPK_SIG_V2_CONTEXT,
   SPK_TTL_MS,
   // Routing
