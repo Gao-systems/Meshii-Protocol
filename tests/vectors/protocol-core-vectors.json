@@ -1,0 +1,119 @@
+{
+  "_meta": {
+    "description": "Deterministic known-answer test (KAT) vectors for @meshii/protocol. All seeds are fixed TEST-ONLY low-entropy byte patterns and contain NO production keys, secrets, mnemonics, or real identities. Expected outputs are produced by deterministic functions over the fixed inputs (Ed25519 per RFC 8032 §5.1.6, X25519/X3DH/HKDF/HMAC, capability/VC canonical signing). See docs/test-vectors.md for purpose, regeneration, and the deterministic-vs-random boundary.",
+    "version": 1,
+    "source_commit_baseline": "f6312a8",
+    "deterministic": true,
+    "contains_secrets": false
+  },
+  "seeds": {
+    "alice_ik_seed_ed25519": "1111111111111111111111111111111111111111111111111111111111111111",
+    "bob_ik_seed_ed25519": "2222222222222222222222222222222222222222222222222222222222222222",
+    "bob_spk_scalar_x25519": "3333333333333333333333333333333333333333333333333333333333333333",
+    "bob_opk_scalar_x25519": "4444444444444444444444444444444444444444444444444444444444444444",
+    "alice_ek_scalar_x25519": "5555555555555555555555555555555555555555555555555555555555555555",
+    "capability_signing_seed_ed25519": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+    "vc_signing_seed_ed25519": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
+  },
+  "identity_pubkeys": {
+    "comment": "ed25519GetPublicKey(seed) — deterministic per RFC 8032.",
+    "alice_ik_public": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+    "bob_ik_public": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+    "alice_ek_public": "38ab664bd86f77d7e66bdd9ae0792913a94fd8b33a1260027e4b46c1f4884c67",
+    "bob_spk_public": "7b0d47d93427f8311160781c7c733fd89f88970aef490d8aa0ee19a4cb8a1b14",
+    "bob_opk_public": "ff2ee45601ec1b67310c7790404585ae697331eee1c1f8cf2419731c1fff3e6b"
+  },
+  "derive_identity_key": {
+    "comment": "deriveIdentityKey(shared_secret, domain, nonce) = Ed25519 from HKDF(salt=UTF8(domain)||nonce, info=meshii-identity-v2).",
+    "shared_secret": "abababababababababababababababababababababababababababababababab",
+    "domain": "alice.gao",
+    "nonce": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+    "expected_private": "819198553d38a680dd1112ec07965e741f74e1634bb6369695efce507c064230",
+    "expected_public": "85151b98b95e69343f760cca614a90e06c41bc6137b79f7c87e50c77c60bb0ca"
+  },
+  "x3dh": {
+    "comment": "x3dhReceive(recipientIKPriv, recipientSPKPriv, recipientOPKPriv?, senderIKPub, senderEKPub). Deterministic: receiver side has no internal randomness. Sender side (x3dhSend) generates a random ephemeral key, so its output is NOT frozen — it is covered by the send<->receive consistency behavioral test instead.",
+    "recipient_ik_seed": "2222222222222222222222222222222222222222222222222222222222222222",
+    "recipient_spk_scalar": "3333333333333333333333333333333333333333333333333333333333333333",
+    "recipient_opk_scalar": "4444444444444444444444444444444444444444444444444444444444444444",
+    "sender_ik_public": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+    "sender_ek_public": "38ab664bd86f77d7e66bdd9ae0792913a94fd8b33a1260027e4b46c1f4884c67",
+    "expected_shared_secret_with_opk": "e6cdaf7312d71fdc72a1802c7a5a64c207b8b4e27d0a036158fcad5cf8e74321",
+    "expected_shared_secret_without_opk": "67de964e3a567101134af9878a9b96105e4e55e7027d9c699d824696ad179876"
+  },
+  "routing_tag": {
+    "comment": "computeRoutingTag(IK_priv, recipient_id, nonce) = HMAC-SHA256(IK_priv, UTF8(recipient_id)||nonce) hex.",
+    "ik_private": "1111111111111111111111111111111111111111111111111111111111111111",
+    "recipient_id": "did:ethr:0x000000000000000000000000000000000000dEaD",
+    "nonce": "0123456789abcdef0123456789abcdef",
+    "expected_tag": "a120e84f37d4997fd3db7293c985a7c4ad56c0eb79271306bf19dc3eace6f952"
+  },
+  "hkdf": {
+    "comment": "hkdfSHA256(ikm, salt, info, length). info is ASCII so this vector is reproducible by ANY RFC 5869 HKDF-SHA256 implementation.",
+    "ikm": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "salt": "404142434445464748494a4b4c4d4e4f",
+    "info_utf8": "meshii-test-vector-v1",
+    "length": 42,
+    "expected_okm": "f57858354dfdebb32fc75bc005ac452b6720d8fa0fb98fac3ec83d94a92080eee019e7e90f8767b29e22"
+  },
+  "hmac_rfc4231_tc2": {
+    "comment": "External cross-impl anchor. RFC 4231 Test Case 2: key=ASCII 'Jefe', data=ASCII 'what do ya want for nothing?'. Expected value is the RFC-published HMAC-SHA256 digest.",
+    "key_utf8": "Jefe",
+    "data_utf8": "what do ya want for nothing?",
+    "expected_hmac": "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
+  },
+  "canonical_json": {
+    "comment": "canonicalJSON(obj): recursively sorted object keys, arrays order-preserved, compact. Internal util (imported from src/crypto/primitives).",
+    "input": { "z": 1, "a": { "y": 2, "b": [3, 1, 2] }, "m": "x", "n": null, "t": true },
+    "expected": "{\"a\":{\"b\":[3,1,2],\"y\":2},\"m\":\"x\",\"n\":null,\"t\":true,\"z\":1}"
+  },
+  "ratchet_state_serialization": {
+    "comment": "serializeRatchetState(state) wire format v0x01. Pins the byte layout against silent format drift. Fields below are fixed test bytes.",
+    "root_key": "1111111111111111111111111111111111111111111111111111111111111111",
+    "sending_chain_key": "2222222222222222222222222222222222222222222222222222222222222222",
+    "receiving_chain_key": null,
+    "sending_dh_private": "3333333333333333333333333333333333333333333333333333333333333333",
+    "sending_dh_public": "4444444444444444444444444444444444444444444444444444444444444444",
+    "receiving_dh_public": "5555555555555555555555555555555555555555555555555555555555555555",
+    "send_message_count": 7,
+    "receive_message_count": 3,
+    "previous_send_count": 5,
+    "skipped_key": "6666666666666666666666666666666666666666666666666666666666666666:2",
+    "skipped_message_key": "7777777777777777777777777777777777777777777777777777777777777777",
+    "expected_serialized": "0111111111111111111111111111111111111111111111111111111111111111110122222222222222222222222222222222222222222222222222222222222222220033333333333333333333333333333333333333333333333333333333333333334444444444444444444444444444444444444444444444444444444444444444015555555555555555555555555555555555555555555555555555555555555555000000070000000300000005000000010042363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363636363a327777777777777777777777777777777777777777777777777777777777777777"
+  },
+  "capability_token": {
+    "comment": "signCapabilityToken(token, signingKey). Ed25519 over canonicalJSON(token) — deterministic per RFC 8032. expires_at is set to year 2100 so the same vector also verifies true for decades.",
+    "signing_seed": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+    "verify_public": "43a72e714401762df66b68c26dfbdf2682aaec9f2474eca4613e424a0fbafd3c",
+    "token": {
+      "call_id": "call-vector-0001",
+      "routing_tag": "a1b2c3d4e5f6",
+      "role": "caller",
+      "vc_subject_did": "did:ethr:0x000000000000000000000000000000000000dEaD",
+      "issued_at": 1700000000000,
+      "expires_at": 4102444800000,
+      "nonce": "00112233445566778899aabbccddeeff"
+    },
+    "expected_canonical_json": "{\"call_id\":\"call-vector-0001\",\"expires_at\":4102444800000,\"issued_at\":1700000000000,\"nonce\":\"00112233445566778899aabbccddeeff\",\"role\":\"caller\",\"routing_tag\":\"a1b2c3d4e5f6\",\"vc_subject_did\":\"did:ethr:0x000000000000000000000000000000000000dEaD\"}",
+    "expected_signature": "60461fde93a14a7ad464d55d148f406b67f5c27a75e432ff87f1e7539012fb5794e1631cb3c566d52f437919b6e7c10133bca57a3757abbab6a32cb6591c000a"
+  },
+  "vc": {
+    "comment": "signVC(vc, signingKey, vm). Ed25519Signature2020, proofValue = base58btc(Ed25519 signature) over canonicalJSON(vc without proof). expirationDate is year 2100 so the same vector also verifies true.",
+    "signing_seed": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    "verify_public": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
+    "verification_method": "did:web:id.gao.domains#key-1",
+    "credential": {
+      "issuanceDate": "2024-01-01T00:00:00.000Z",
+      "expirationDate": "2100-01-01T00:00:00.000Z",
+      "credentialSubject": {
+        "id": "did:ethr:0x000000000000000000000000000000000000dEaD",
+        "walletAddress": "0x000000000000000000000000000000000000dEaD",
+        "identityKeyPublic": "deadbeef",
+        "routingTagSalt": "00112233445566778899aabbccddeeff",
+        "tier": "wallet"
+      }
+    },
+    "expected_proof_value": "2E4jv8Rkn43rcMvRsjzkhGWqaGGNa6HXGPcyEs3skWD5uCx6To7srS9ZHQnzBNS6tYDvB2cK2B1WLfijjEn6pxdY"
+  }
+}
