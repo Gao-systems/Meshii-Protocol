@@ -47,6 +47,7 @@ entirely.
 | `canonicalJSON` | ✅ | frozen KAT |
 | `serializeRatchetState` | ✅ for a fixed state | frozen KAT |
 | `signCapabilityToken`, `signVC` | ✅ for a fixed payload | frozen KAT |
+| SPK signature v2 (`Ed25519` over canonical `{v,spk,keyId,createdAt,expiresAt}`) | ✅ for fixed inputs | frozen KAT (see [`docs/spk-freshness.md`](spk-freshness.md)) |
 | `x3dhSend` | ❌ generates a random ephemeral key | behavioral (send↔receive agreement) |
 | `aesGCMEncrypt` / `ratchetEncrypt` | ❌ random 96-bit nonce per message | behavioral (round-trip / tamper) |
 | `generateIdentityKeyBundle`, `generate*KeyPair` | ❌ CSPRNG | behavioral |

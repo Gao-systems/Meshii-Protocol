@@ -39,6 +39,9 @@ export {
   generateIdentityKeyBundle,
   extractPublicBundle,
   verifySPKSignature,
+  verifySPKSignatureV2,
+  SPK_SIG_V2_CONTEXT,
+  SPK_TTL_MS,
 } from "./identity.js";
 
 export { computeRoutingTag, generateRoutingTagNonce } from "./routing.js";
